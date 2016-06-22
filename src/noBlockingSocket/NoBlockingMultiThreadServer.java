@@ -68,19 +68,19 @@ public class NoBlockingMultiThreadServer {
 						
 					}
 					if(key.isWritable()){
-						System.out.println("key.isWritable()");
+//						System.out.println("key.isWritable()");
 						SocketChannel sc = (SocketChannel)key.channel();
 						ByteBuffer buffer = (ByteBuffer)key.attachment();
 						buffer.flip();
-						System.out.println("buffer.limit="+buffer.limit()+", pos="+buffer.position());
+//						System.out.println("buffer.limit="+buffer.limit()+", pos="+buffer.position());
 						//把buffer中的所有字节转换为字符串
 						String data = decode(buffer);
-						if(data.indexOf("\r") < 0)break;
+						if(data.indexOf("\r\n") < 0)break;
 						//截取一行数据
-						String outputData = data.substring(0, data.indexOf("\r")+1);
+						String outputData = data.substring(0, data.indexOf("\n")+1);
 						System.out.println(outputData);
 						
-						ByteBuffer outputBuffer = encode(outputData + "@get");
+						ByteBuffer outputBuffer = encode("@get: " + outputData);
 						//输出oututBuffer中的所有字节
 						while(outputBuffer.hasRemaining()){
 							sc.write(outputBuffer);
@@ -89,8 +89,8 @@ public class NoBlockingMultiThreadServer {
 						ByteBuffer tempBuffer = charSet.encode(outputData);
 						
 						int limit = tempBuffer.limit();
-						System.out.println("tempBuffer.limit="+limit+", pos="+tempBuffer.position()
-							+", capacity="+tempBuffer.capacity());
+//						System.out.println("tempBuffer.limit="+limit+", pos="+tempBuffer.position()
+//							+", capacity="+tempBuffer.capacity());
 						//把buffer的位置设置为tempBuffer的极限
 						buffer.position(limit);
 						//删除旧的字节
