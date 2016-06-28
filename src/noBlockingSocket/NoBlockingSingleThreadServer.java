@@ -1,9 +1,11 @@
 package noBlockingSocket;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
@@ -11,28 +13,26 @@ import java.nio.channels.SocketChannel;
 import java.nio.charset.Charset;
 import java.util.Iterator;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
 /**
- * 非阻塞与多线程的混合使用
- * 
- * 用新线程进行accept()，
- * 用非阻塞进行recive()和send()
+ * 单线程非阻塞服务
+ * 使用selector，监听注册、读、写事件
  * @author Cuber_Q
  *
  */
-public class NoBlockingMultiThreadServer {
+public class NoBlockingSingleThreadServer {
 	private ServerSocketChannel serverChannel;
 	private Selector selector;
 	private Charset charSet = Charset.forName("GBK");
-	private Object lock = new Object();
 	
-	public NoBlockingMultiThreadServer(){
+	public NoBlockingSingleThreadServer(){
 		System.out.println("init...");
 		try {
 			//创建selector对象
 			selector = Selector.open();
 			serverChannel = ServerSocketChannel.open();
 			serverChannel.socket().setReuseAddress(true);
-//			serverChannel.configureBlocking(false);
+			serverChannel.configureBlocking(false);
 			serverChannel.bind(new InetSocketAddress(8081));
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
@@ -40,40 +40,35 @@ public class NoBlockingMultiThreadServer {
 		}
 		System.out.println("server start...");
 	}
-	public void service() throws IOException{
-		while(true){
-			/**
-			 * 服务一启动，accept线程先启动，接着service()启动
-			 * selecte()要一直询问同步资源allkeys，
-			 * 当有客户端连接时，accept()方法试图去操作 allkeys(注册)，但allkeys
-			 * 一直被selecte()占用，导致阻塞，所以客户端连接不上。
-			 * 
-			 * 所以当有新客户端连进来，要注册时
-			 * 必须暂停select()方法，释放出allkeys
-			 */
-			synchronized (lock) {
-				
-			}
-			if(selector.select() == 0)continue;
-			Set<SelectionKey> keySet = selector.selectedKeys();
-			Iterator<SelectionKey> it = keySet.iterator();
-			SelectionKey key = null;
-			while(it.hasNext()){
-				key = it.next();
-				it.remove();
-//					if(key.isAcceptable()){
-//						accept();
-//					}
-				if(key.isReadable()){
-					recive(key);
-				}
-				if(key.isWritable()){
-					send(key);
-				}
+	public void service(){
+		try {
+			serverChannel.register(selector, SelectionKey.OP_ACCEPT);
+			while(selector.select() > 0){
+				Set<SelectionKey> keySet = selector.selectedKeys();
+				Iterator<SelectionKey> it = keySet.iterator();
+				while(it.hasNext()){
+					SelectionKey key = it.next();
+					it.remove();
+					if(key.isAcceptable()){
+						accept(key);
+					}
+					if(key.isReadable()){
+						recive(key);
+					}
+					if(key.isWritable()){
+						send(key);
+					}
 					
+				}
 			}
 			
-		} 
+		} catch (ClosedChannelException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 	}
 	public String decode(ByteBuffer buffer){
 		CharBuffer charBuffer = charSet.decode(buffer);
@@ -82,27 +77,19 @@ public class NoBlockingMultiThreadServer {
 	public ByteBuffer encode(String str){
 		return charSet.encode(str);
 	}
-	public void accept(){
-		while(true){
-			try {
-				SocketChannel sc = serverChannel.accept();
-				System.out.println("key.isAcceptable(): "+sc.socket().getPort());
-				sc.configureBlocking(false);
-				ByteBuffer dst = ByteBuffer.allocate(4096);
-				synchronized (lock) {
-					/**
-					 * 如果正好在执行select()，且处于阻塞，
-					 * 则唤醒它，立即退出select()
-					 */
-					selector.wakeup();
-					sc.register(selector, 
-							SelectionKey.OP_READ|
-							SelectionKey.OP_WRITE,dst);
-				}
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
+	public void accept(SelectionKey key){
+		System.out.println("key.isAcceptable()");
+		ServerSocketChannel ssc = (ServerSocketChannel)key.channel();
+		try {
+			SocketChannel sc = ssc.accept();
+			sc.configureBlocking(false);
+			ByteBuffer dst = ByteBuffer.allocate(4096);
+			sc.register(selector, 
+				SelectionKey.OP_READ|
+				SelectionKey.OP_WRITE,dst);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
 		}
 	}
 	public void recive(SelectionKey key){
@@ -156,15 +143,7 @@ public class NoBlockingMultiThreadServer {
 		//删除旧的字节
 		buffer.compact();
 	}
-	public static void main(String[] args) throws IOException{
-		NoBlockingMultiThreadServer server = 
-				new NoBlockingMultiThreadServer();
-		new Thread("accept"){
-			@Override
-			public void run(){
-				server.accept();
-			}
-		}.start();;
-		server.service();
+	public static void main(String[] args){
+		new NoBlockingSingleThreadServer().service();
 	}
 }
