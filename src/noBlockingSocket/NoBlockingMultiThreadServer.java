@@ -32,6 +32,7 @@ public class NoBlockingMultiThreadServer {
 			selector = Selector.open();
 			serverChannel = ServerSocketChannel.open();
 			serverChannel.socket().setReuseAddress(true);
+			//让accept()成为阻塞式
 //			serverChannel.configureBlocking(false);
 			serverChannel.bind(new InetSocketAddress(8081));
 		} catch (IOException e) {
@@ -122,6 +123,7 @@ public class NoBlockingMultiThreadServer {
 		buffer.limit(buffer.capacity());
 		buffer.put(readBuffer);
 	}
+	
 	public void send(SelectionKey key){
 //		System.out.println("key.isWritable()");
 		SocketChannel sc = (SocketChannel)key.channel();
@@ -134,7 +136,13 @@ public class NoBlockingMultiThreadServer {
 		//截取一行数据
 		String outputData = data.substring(0, data.indexOf("\n")+1);
 		System.out.println(sc.socket().getPort()+":"+outputData);
-		
+		try {
+			//单线程，会阻塞
+			Thread.currentThread().sleep(5000);
+		} catch (InterruptedException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
 		ByteBuffer outputBuffer = encode(sc.socket().getPort()+"@get: " + outputData);
 		//输出oututBuffer中的所有字节
 		while(outputBuffer.hasRemaining()){
