@@ -80,6 +80,9 @@ class Handler implements Runnable{
 		try {
 			while((msg = reader.readLine()) != null){
 				System.out.println(msg);
+				if("bye".equals(msg)){
+					break;
+				}
 				writer.println(remoteAddr +" [" + msg + "] got");
 				writer.flush();
 			}
