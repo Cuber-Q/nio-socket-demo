@@ -56,6 +56,7 @@ public class NoBlockingMultiThreadServer {
 				
 			}
 			if(selector.select() == 0)continue;
+			//有多个通道准备就绪
 			Set<SelectionKey> keySet = selector.selectedKeys();
 			Iterator<SelectionKey> it = keySet.iterator();
 			SelectionKey key = null;

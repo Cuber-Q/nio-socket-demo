@@ -1,5 +1,10 @@
 package noBlockingSocketClient;
 
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
+import java.nio.channels.SocketChannel;
 import java.util.LinkedList;
 
 /**
@@ -15,11 +20,34 @@ import java.util.LinkedList;
 public class PingClient {
 	private LinkedList toConnect;
 	private LinkedList toPrint;
+	private Selector selector;
+	private Object lock = new Object();
+	
+	class Target {
+		public String hostname;
+		public int port;
+		public SocketChannel sc;
+		public boolean connected = false;
+		public boolean print = false;
+		public long start = 0;
+		public int cost = 0;
+	}
 	
 	class Connector implements Runnable{
 		@Override
 		public void run() {
 			
+		}
+		public Connector(){}
+		public Connector(Target target) throws IOException{
+			target.sc = SocketChannel.open();
+			target.sc.connect(new InetSocketAddress(target.hostname, target.port));
+			target.sc.configureBlocking(false);
+			target.start = System.currentTimeMillis();
+			synchronized(lock){
+				selector.wakeup();
+				target.sc.register(selector, SelectionKey.OP_CONNECT,target.start);
+			}
 		}
 		//pick up host from toConnect
 		
