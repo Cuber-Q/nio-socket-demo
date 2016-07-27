@@ -26,9 +26,9 @@ public class Connector {
 			sc.register(selector, SelectionKey.OP_CONNECT,start);
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
-			e.printStackTrace();
 			System.out.println("error occured when Connector init, hostName="
 					+hostName+", port="+port);
+			e.printStackTrace();
 
 		}
 	}
