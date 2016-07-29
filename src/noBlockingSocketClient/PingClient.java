@@ -6,6 +6,7 @@ import java.net.InetSocketAddress;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Scanner;
@@ -24,7 +25,7 @@ public class PingClient {
 	private LinkedList<Target> toConnect = new LinkedList<Target>();
 	private LinkedList<Target> toPrint = new LinkedList<Target>();
 	private Selector selector;
-	private Object lock = new Object();
+	
 	
 	class Target {
 		public String hostname;
@@ -42,15 +43,14 @@ public class PingClient {
 			this.hostname = hostname;
 			this.port = port;
 			addr = new InetSocketAddress(hostname, port);
-			start = System.currentTimeMillis();
 			
 			try {
 				sc = SocketChannel.open();
 				sc.configureBlocking(false);
 				sc.connect(addr);
-			} catch (IOException e) {
+			} catch (Exception e) {
 				// TODO Auto-generated catch block
-				e.printStackTrace();
+				System.out.println(hostname+" exxception, e="+e);
 			}
 		}
 		@Override
@@ -62,8 +62,10 @@ public class PingClient {
 	class Connector extends Thread{
 		@Override
 		public void run() {
-			registerTargets();
-			processConnectedTargets();
+			while(true){
+				registerTargets();
+				processConnectedTargets();
+			}
 		}
 		public Connector(){}
 //		public Connector(Target target) throws IOException{
@@ -86,11 +88,15 @@ public class PingClient {
 	}
 	//pickup all target from the toConn and regist them
 	public void registerTargets(){
-		synchronized (toConnect) {
-			while(toConnect.size() > 0){
+//		System.out.println("registerTargets, synchronized (toConnect)");
+		while(toConnect.size() > 0){
+			synchronized (toConnect) {
+//			System.out.println("registerTargets,while(toConnect.size() > 0)");
+//				System.out.println("registerTargets ready to registe");
 				Target target = toConnect.removeFirst();
 				try {
 					selector.wakeup();
+					target.start = System.currentTimeMillis();
 					target.sc.register(selector, SelectionKey.OP_CONNECT,target);
 					System.out.println("registerTargets done. "+target);
 				} catch (Exception e) {
@@ -110,6 +116,7 @@ public class PingClient {
 						//handle connected target
 						Target target = (Target)key.attachment();
 						target.sc.close();
+						target.cost = System.currentTimeMillis() - target.start;
 						addToPrint(target);
 						System.out.println("processConnectedTargets done. "+target);
 					}
@@ -124,39 +131,54 @@ public class PingClient {
 	//put connected target into toPrint list
 	public void addToPrint(Target target){
 		synchronized (toPrint) {
-			toPrint.notify();
-			target.cost = System.currentTimeMillis() - target.start;
+//			toPrint.notify();
 			toPrint.add(target);
 		}
 	}
 	class Printer extends Thread{
+		private long current = 0L;
+		public Printer() {
+			// TODO Auto-generated constructor stub
+		}
+		
 		@Override
 		public void run() {
-			print();
+			current = System.currentTimeMillis();
+			print(current);
 		}
 		//pick up from toPrint
 		
 		//print relative info, such as host name and cost time
 	}
-	public void print(){
+	public void print(long current){
 		try {
 			while(true){
 				Target target=null;
 				synchronized (toPrint) {
-					while(toPrint.size() == 0){
-						toPrint.wait();
+//					while(toPrint.size() == 0){
+//						toPrint.wait();
+//					}
+					while((System.currentTimeMillis() - current < 5*1000)
+							&& toPrint.size() > 0){
+						target = toPrint.removeFirst();
+						System.out.println("current="+current);
 					}
-					target = toPrint.removeFirst();
+					while((System.currentTimeMillis() - current) > 5*1000){
+						System.out.println("shutdown while no more data more than 5s");
+						System.exit(0);
+					}
 				}
 				show(target);
 			}
-		}catch (InterruptedException e) {
+		}catch (Exception e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 	}
 	public void show(Target target){
-		System.out.println(target+" finished, cost="+target.cost+"ms");
+		if(null == target) return;
+		System.out.println("["+target+" finished, cost="+target.cost+"ms]");
+		System.out.println();
 	}
 	
 
@@ -173,34 +195,63 @@ public class PingClient {
 			connector.start();
 			printer.start();
 			//要放在最后，不然前两个线程没机会启动起
-			reciveInput();
+//			reciveInputFromConsole();
+			autoReciveInput();
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 	}
-	public void reciveInput(){
+	public void reciveInputFromConsole(){
 		Scanner scanner = new Scanner(System.in);
-		String hostname = "";
-		int port = 80;
-		System.out.println("ready to recive...");
+		System.out.println("ready to recive from console...");
 		while(scanner.hasNextLine()){
 			String[] input = scanner.nextLine().split("\\:");
+			createTarget(input);
+		}
+	}
+	public void autoReciveInput(){
+		System.out.println("ready to auto recive...");
+		ArrayList<String> inputs = new ArrayList<String>();
+		inputs.add("www.baidu.com:80");
+		inputs.add("www.douban.com:80");
+		inputs.add("www.1931.com:80");
+//		inputs.add("www.yy.com:80");
+		inputs.add("carrot.yy.com:80");
+		inputs.add("livemgr.yy.com:80");
+		inputs.add("tmall.com:80");
+		inputs.add("jd.com:80");
+		for(String str : inputs){
+			createTarget(str.split("\\:"));
+//			try {
+//				Thread.currentThread().sleep(10);
+//			} catch (InterruptedException e) {
+//				// TODO Auto-generated catch block
+//				e.printStackTrace();
+//			}
+		}
+	}
+	public void createTarget(String[] input){
+		String hostname = "";
+		int port = 80;
+		if(input.length == 1){
+			hostname = input[0];
+		}else{
 			if(input[0] != ""){
 				hostname = input[0];
 			}
 			if(input[1] != ""){
 				port = Integer.valueOf(input[1]);
 			}
-			Target target = new Target(hostname,port);
-			addToConnect(target);
 		}
+		Target target = new Target(hostname,port);
+		addToConnect(target);
 	}
 	public void addToConnect(Target target){
 		synchronized (toConnect) {
 			toConnect.add(target);
 			System.out.println("addToConnect done. "+target);
+			selector.wakeup();
 		}
-		selector.wakeup();
 	}
 }
