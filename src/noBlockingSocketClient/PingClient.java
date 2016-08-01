@@ -1,7 +1,6 @@
 package noBlockingSocketClient;
 
 import java.io.IOException;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
@@ -26,7 +25,7 @@ public class PingClient {
 	private LinkedList<Target> toPrint = new LinkedList<Target>();
 	private Selector selector;
 	
-	
+	//a connection task
 	class Target {
 		public String hostname;
 		public int port;
@@ -67,32 +66,11 @@ public class PingClient {
 				processConnectedTargets();
 			}
 		}
-		public Connector(){}
-//		public Connector(Target target) throws IOException{
-//			target.sc = SocketChannel.open();
-//			target.sc.connect(new InetSocketAddress(target.hostname, target.port));
-//			target.sc.configureBlocking(false);
-//			target.start = System.currentTimeMillis();
-//			synchronized(lock){
-//				selector.wakeup();
-//				target.sc.register(selector, SelectionKey.OP_CONNECT,target.start);
-//			}
-//			
-//			
-//		}
-		//pick up host from toConnect
-		
-		//connect to the host
-				
-		//add into toPrint when the host has been connected successfully
 	}
 	//pickup all target from the toConn and regist them
 	public void registerTargets(){
-//		System.out.println("registerTargets, synchronized (toConnect)");
 		while(toConnect.size() > 0){
 			synchronized (toConnect) {
-//			System.out.println("registerTargets,while(toConnect.size() > 0)");
-//				System.out.println("registerTargets ready to registe");
 				Target target = toConnect.removeFirst();
 				try {
 					selector.wakeup();
@@ -106,6 +84,7 @@ public class PingClient {
 			}
 		}
 	}
+	//add into toPrint when the target has been finished successfully
 	public void processConnectedTargets(){
 		try {
 			while(selector.select()>0){
@@ -136,34 +115,25 @@ public class PingClient {
 		}
 	}
 	class Printer extends Thread{
-		private long current = 0L;
-		public Printer() {
-			// TODO Auto-generated constructor stub
-		}
-		
 		@Override
 		public void run() {
-			current = System.currentTimeMillis();
-			print(current);
+			print(System.currentTimeMillis());
 		}
-		//pick up from toPrint
 		
-		//print relative info, such as host name and cost time
 	}
+	//pick up from toPrint
+	//print relative info, such as host name and cost time
 	public void print(long current){
 		try {
 			while(true){
 				Target target=null;
 				synchronized (toPrint) {
-//					while(toPrint.size() == 0){
-//						toPrint.wait();
-//					}
 					while((System.currentTimeMillis() - current < 5*1000)
 							&& toPrint.size() > 0){
 						target = toPrint.removeFirst();
-						System.out.println("current="+current);
+						current = System.currentTimeMillis();
 					}
-					while((System.currentTimeMillis() - current) > 5*1000){
+					if((System.currentTimeMillis() - current > 5*1000)){
 						System.out.println("shutdown while no more data more than 5s");
 						System.exit(0);
 					}
@@ -175,18 +145,17 @@ public class PingClient {
 			e.printStackTrace();
 		}
 	}
+	
 	public void show(Target target){
 		if(null == target) return;
 		System.out.println("["+target+" finished, cost="+target.cost+"ms]");
 		System.out.println();
 	}
 	
-
 	public static void main(String[] args){
-		//read hosts from console
 		new PingClient();
-		//add host into toConnect
 	}
+	
 	public PingClient(){
 		try {
 			selector = Selector.open();
@@ -202,6 +171,7 @@ public class PingClient {
 			e.printStackTrace();
 		}
 	}
+	//read hosts and port from console
 	public void reciveInputFromConsole(){
 		Scanner scanner = new Scanner(System.in);
 		System.out.println("ready to recive from console...");
@@ -223,14 +193,9 @@ public class PingClient {
 		inputs.add("jd.com:80");
 		for(String str : inputs){
 			createTarget(str.split("\\:"));
-//			try {
-//				Thread.currentThread().sleep(10);
-//			} catch (InterruptedException e) {
-//				// TODO Auto-generated catch block
-//				e.printStackTrace();
-//			}
 		}
 	}
+	
 	public void createTarget(String[] input){
 		String hostname = "";
 		int port = 80;
