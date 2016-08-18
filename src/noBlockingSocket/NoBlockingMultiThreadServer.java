@@ -94,6 +94,7 @@ public class NoBlockingMultiThreadServer {
 				System.out.println("key.isAcceptable(): "+sc.socket().getPort());
 				sc.configureBlocking(false);
 				ByteBuffer dst = ByteBuffer.allocate(256);
+				StatedByteBuffer sbb= new StatedByteBuffer(dst);
 				synchronized (lock) {
 					/**
 					 * 如果正好在执行select()，且处于阻塞，
@@ -101,7 +102,7 @@ public class NoBlockingMultiThreadServer {
 					 */
 					selector.wakeup();
 					sc.register(selector, 
-							SelectionKey.OP_READ,dst);
+							SelectionKey.OP_READ,sbb);
 				}
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
@@ -112,7 +113,7 @@ public class NoBlockingMultiThreadServer {
 	public void recive(SelectionKey key){
 		System.out.println("key.isReadable()");
 		SocketChannel sc = (SocketChannel)key.channel();
-		ByteBuffer buffer = (ByteBuffer)key.attachment();
+		StatedByteBuffer buffer = (StatedByteBuffer)key.attachment();
 		ByteBuffer readBuffer = ByteBuffer.allocate(256);
 		long readSize = 0;
 		try {
@@ -121,12 +122,10 @@ public class NoBlockingMultiThreadServer {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		if(readSize == 256){
-			//缓冲区读满，数据未被全部读出，再读
-		}
+		
 		readBuffer.flip();
-		buffer.limit(buffer.capacity());
-		buffer.put(readBuffer);
+		buffer.byteBuffer.limit(buffer.byteBuffer.capacity());
+		buffer.byteBuffer.put(readBuffer);
 		selector.wakeup();
 		try {
 			sc.register(selector, SelectionKey.OP_WRITE,buffer);
@@ -134,6 +133,14 @@ public class NoBlockingMultiThreadServer {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+		
+		if(readSize == 256){
+			//缓冲区读满，数据未被全部读出，继续注册读事件
+			buffer.current += readSize; 
+		}else{
+			buffer.finished = true;
+		}
+//		key.attach(buffer);
 	}
 	
 	public void send(SelectionKey key){
@@ -141,11 +148,11 @@ public class NoBlockingMultiThreadServer {
 		//解除‘写’的关注
 		key.interestOps(key.interestOps() & (~SelectionKey.OP_WRITE));
 		SocketChannel sc = (SocketChannel)key.channel();
-		ByteBuffer buffer = (ByteBuffer)key.attachment();
-		buffer.flip();
+		StatedByteBuffer buffer = (StatedByteBuffer)key.attachment();
+		buffer.byteBuffer.flip();
 //		System.out.println("buffer.limit="+buffer.limit()+", pos="+buffer.position());
 		//把buffer中的所有字节转换为字符串
-		String data = decode(buffer);
+		String data = decode(buffer.byteBuffer);
 //		if(data.indexOf("\r\n") < 0)return;
 		//截取一行数据
 		String outputData = data;
@@ -168,9 +175,14 @@ public class NoBlockingMultiThreadServer {
 		ByteBuffer tempBuffer = charSet.encode(outputData);
 		
 		int limit = tempBuffer.limit();
-		buffer.position(limit);
+		buffer.byteBuffer.position(limit);
 		//删除旧的字节
-		buffer.compact();
+		buffer.byteBuffer.compact();
+		
+		//检查是否读取完
+		if(!buffer.finished){
+			key.interestOps(key.interestOps() | SelectionKey.OP_READ);
+		}
 	}
 	public static void main(String[] args) throws IOException{
 		NoBlockingMultiThreadServer server = 
@@ -182,5 +194,13 @@ public class NoBlockingMultiThreadServer {
 			}
 		}.start();;
 		server.service();
+	}
+}
+class StatedByteBuffer{
+	ByteBuffer byteBuffer;
+	boolean finished = false;
+	int current = 0;
+	public StatedByteBuffer(ByteBuffer buffer){
+		this.byteBuffer = buffer;
 	}
 }
