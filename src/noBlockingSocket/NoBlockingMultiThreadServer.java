@@ -114,14 +114,17 @@ public class NoBlockingMultiThreadServer {
 		SocketChannel sc = (SocketChannel)key.channel();
 		ByteBuffer buffer = (ByteBuffer)key.attachment();
 		ByteBuffer readBuffer = ByteBuffer.allocate(256);
+		long readSize = 0;
 		try {
-			sc.read(readBuffer);
+			readSize = sc.read(readBuffer);
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+		if(readSize == 256){
+			//缓冲区读满，数据未被全部读出，再读
+		}
 		readBuffer.flip();
-		
 		buffer.limit(buffer.capacity());
 		buffer.put(readBuffer);
 		selector.wakeup();
