@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
@@ -78,7 +79,9 @@ public class NoBlockingMultiThreadServer {
 		} 
 	}
 	public String decode(ByteBuffer buffer){
+		long start = System.currentTimeMillis();
 		CharBuffer charBuffer = charSet.decode(buffer);
+//		System.out.println("------------------decode finished, cost="+(System.currentTimeMillis()-start)+"ms");
 		return charBuffer.toString();
 	}
 	public ByteBuffer encode(String str){
@@ -90,7 +93,7 @@ public class NoBlockingMultiThreadServer {
 				SocketChannel sc = serverChannel.accept();
 				System.out.println("key.isAcceptable(): "+sc.socket().getPort());
 				sc.configureBlocking(false);
-				ByteBuffer dst = ByteBuffer.allocate(4096);
+				ByteBuffer dst = ByteBuffer.allocate(256);
 				synchronized (lock) {
 					/**
 					 * 如果正好在执行select()，且处于阻塞，
@@ -98,8 +101,7 @@ public class NoBlockingMultiThreadServer {
 					 */
 					selector.wakeup();
 					sc.register(selector, 
-							SelectionKey.OP_READ|
-							SelectionKey.OP_WRITE,dst);
+							SelectionKey.OP_READ,dst);
 				}
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
@@ -111,8 +113,7 @@ public class NoBlockingMultiThreadServer {
 		System.out.println("key.isReadable()");
 		SocketChannel sc = (SocketChannel)key.channel();
 		ByteBuffer buffer = (ByteBuffer)key.attachment();
-		
-		ByteBuffer readBuffer = ByteBuffer.allocate(32);
+		ByteBuffer readBuffer = ByteBuffer.allocate(256);
 		try {
 			sc.read(readBuffer);
 		} catch (IOException e) {
@@ -123,44 +124,47 @@ public class NoBlockingMultiThreadServer {
 		
 		buffer.limit(buffer.capacity());
 		buffer.put(readBuffer);
+		selector.wakeup();
+		try {
+			sc.register(selector, SelectionKey.OP_WRITE,buffer);
+		} catch (ClosedChannelException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 	}
 	
 	public void send(SelectionKey key){
-//		System.out.println("key.isWritable()");
+		System.out.println("key.isWritable()");
+		//解除‘写’的关注
+		key.interestOps(key.interestOps() & (~SelectionKey.OP_WRITE));
 		SocketChannel sc = (SocketChannel)key.channel();
 		ByteBuffer buffer = (ByteBuffer)key.attachment();
 		buffer.flip();
 //		System.out.println("buffer.limit="+buffer.limit()+", pos="+buffer.position());
 		//把buffer中的所有字节转换为字符串
 		String data = decode(buffer);
-		if(data.indexOf("\r\n") < 0)return;
+//		if(data.indexOf("\r\n") < 0)return;
 		//截取一行数据
-		String outputData = data.substring(0, data.indexOf("\n")+1);
-		System.out.println(sc.socket().getPort()+":"+outputData);
-		try {
-			//单线程，会阻塞
-			Thread.currentThread().sleep(5000);
-		} catch (InterruptedException e1) {
-			// TODO Auto-generated catch block
-			e1.printStackTrace();
-		}
-		ByteBuffer outputBuffer = encode(sc.socket().getPort()+"@get: " + outputData);
+		String outputData = data;
+		System.out.println(outputData);
+		ByteBuffer outputBuffer = encode(sc.socket().getPort()+"@get! ");
 		//输出oututBuffer中的所有字节
+		int writeSize = 0;
 		while(outputBuffer.hasRemaining()){
 			try {
-				sc.write(outputBuffer);
+				writeSize = sc.write(outputBuffer);
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 		}
+		if(writeSize == 0){
+			key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
+		}
 		//把outData字符串按GBK编码，转换为字节，放在tempBuffer中
 		ByteBuffer tempBuffer = charSet.encode(outputData);
 		
 		int limit = tempBuffer.limit();
-//		System.out.println("tempBuffer.limit="+limit+", pos="+tempBuffer.position()
-//			+", capacity="+tempBuffer.capacity());
-		//把buffer的位置设置为tempBuffer的极限
 		buffer.position(limit);
 		//删除旧的字节
 		buffer.compact();
