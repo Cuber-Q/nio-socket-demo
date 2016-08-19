@@ -157,12 +157,15 @@ public class NoBlockingMultiThreadServer {
 		//截取一行数据
 		String outputData = data;
 		System.out.println(outputData);
-		ByteBuffer outputBuffer = encode(sc.socket().getPort()+"@get! ");
+		ByteBuffer outputBuffer = encode(RESPONSE);
 		//输出oututBuffer中的所有字节
 		int writeSize = 0;
 		while(outputBuffer.hasRemaining()){
 			try {
-				writeSize = sc.write(outputBuffer);
+				//如果连接已经被客户端关闭，则会抛出IO异常
+				if(sc.isOpen())
+					writeSize = sc.write(outputBuffer);
+				else sc.close();
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -185,6 +188,10 @@ public class NoBlockingMultiThreadServer {
 		}
 	}
 	public static void main(String[] args) throws IOException{
+		for(int i=0;i<4096;i++){
+			RESPONSE += "x";
+		}
+		RESPONSE += "\r\n";
 		NoBlockingMultiThreadServer server = 
 				new NoBlockingMultiThreadServer();
 		new Thread("accept"){
@@ -195,6 +202,18 @@ public class NoBlockingMultiThreadServer {
 		}.start();;
 		server.service();
 	}
+	
+	public static String RESPONSE = 
+			"HTTP/1.1 200 OK\r\n"
++			"Server: nginx\r\n"
++			"Date: Fri, 19 Aug 2016 07:33:25 GMT\r\n"
++			"Content-Type: text/html; charset=GBK\r\n"
++			"Content-Length: 4096\r\n"
++			"Connection: keep-alive\r\n"
++			"Expires: Sat, 20 Aug 2016 07:33:25 GMT\r\n"
++			"Cache-Control: max-age=86400\r\n"
++"\r\n"
++			"";
 }
 class StatedByteBuffer{
 	ByteBuffer byteBuffer;
